@@ -1,0 +1,69 @@
+getwd()
+setwd("C:/Users/lorig/OneDrive/Desktop/Thesis/1_Methods_Input/Scripts")
+library(tidyverse)
+library(ggplot2)
+
+# addition of metadata ----
+metadata <- read.delim("C:/Users/lorig/OneDrive/Desktop/Thesis/1_Methods_Input/Scripts/1.1_Method_ESR_expression_GTEx_analysis/GTEx_Analysis_v11_Annotations_SubjectPhenotypesDS.txt", sep = "\t")
+
+## addition of ESR1 and ESR2 expression values in small intestine ileum ----
+
+intestine_ileum <- read.table("C:/Users/lorig/OneDrive/Desktop/Thesis/1_Methods_Input/Scripts/1.1_Method_ESR_expression_GTEx_analysis/gene_tpm_v11_small_intestine_terminal_ileum.gct", sep = "\t", skip = 2, header = T, check.names = F)
+
+intestine_ileum <- intestine_ileum[intestine_ileum$Description == c("ESR1", "ESR2"),]
+
+intestine_ileum <- data.frame(t(intestine_ileum), check.names = F)
+intestine_ileum <- intestine_ileum[-c(1,2),]
+colnames(intestine_ileum) <- c("ESR1", "ESR2")
+intestine_ileum$tissue_type <- "intestine_ileum"
+rownames(intestine_ileum) <- sapply(strsplit(rownames(intestine_ileum), "\\-"), function(x) paste(x[1:2], collapse="-"))
+intestine_ileum <- rownames_to_column(intestine_ileum, "SUBJID")
+
+intestine_ileum <- merge(intestine_ileum, metadata, by = "SUBJID", all.y = F, all.x = T)
+
+## addition of ESR1 and ESR2 expression values in the transverse colon ----
+
+colon_transverse <- read.table("C:/Users/lorig/OneDrive/Desktop/Thesis/1_Methods_Input/Scripts/1.1_Method_ESR_expression_GTEx_analysis/gene_tpm_v11_colon_transverse.gct", check.names = F , header = TRUE, skip = 2, sep = "\t")
+
+colon_transverse <- colon_transverse[colon_transverse$Description == c("ESR1", "ESR2"),]
+colon_transverse <- data.frame(t(colon_transverse), check.names = F)
+
+colon_transverse <- colon_transverse[-c(1,2),]
+colnames(colon_transverse) <- c("ESR1", "ESR2")
+colon_transverse$tissue_type <- "colon_transverse"
+rownames(colon_transverse) <- sapply(strsplit(rownames(colon_transverse), "\\-"), function(x) paste(x[1:2], collapse="-"))
+colon_transverse <- rownames_to_column(colon_transverse, "SUBJID")
+
+colon_transverse <- merge(colon_transverse, metadata, by = "SUBJID", all.y = F, all.x = T)
+
+## addition of ESR1 and ESR2 expression values of colon sigmoid ----
+
+colon_sigmoid <- read.table( "C:/Users/lorig/OneDrive/Desktop/Thesis/1_Methods_Input/Scripts/1.1_Method_ESR_expression_GTEx_analysis/gene_tpm_v11_colon_sigmoid.gct", check.names = F , header = TRUE, skip = 2, sep = "\t")
+
+colon_sigmoid <- colon_sigmoid[colon_sigmoid$Description == c("ESR1", "ESR2"),]
+colon_sigmoid <- data.frame(t(colon_sigmoid), check.names = F)
+
+colon_sigmoid <- colon_sigmoid[-c(1,2),]
+colnames(colon_sigmoid) <- c("ESR1", "ESR2")
+colon_sigmoid$tissue_type <- "colon_sigmoid"
+rownames(colon_sigmoid) <- sapply(strsplit(rownames(colon_sigmoid), "\\-"), function(x) paste(x[1:2], collapse="-"))
+colon_sigmoid <- rownames_to_column(colon_sigmoid, "SUBJID")
+
+colon_sigmoid <- merge(colon_sigmoid, metadata, by = "SUBJID", all.y = F, all.x = T)
+
+# merge of all tables ----
+
+ESR_expression <- rbind(intestine_ileum, colon_transverse, colon_sigmoid)
+ESR_expression$SEX <- as.factor(ESR_expression$SEX)
+levels(ESR_expression$SEX) <- c("M", "F")
+levels(ESR_expression$SEX)
+ESR_expression$AGE <- as.factor(ESR_expression$AGE)
+levels(ESR_expression$AGE)
+ESR_expression$tissue_type <- as.factor(ESR_expression$tissue_type)
+levels(ESR_expression$tissue_type)
+ESR_expression$tissue_type <- factor(ESR_expression$tissue_type, levels=c("intestine_ileum", "colon_transverse", "colon_sigmoid"))
+ESR_expression$ESR1<- as.numeric(ESR_expression$ESR1)
+ESR_expression$ESR2 <- as.numeric(ESR_expression$ESR2)
+
+saveRDS(ESR_expression, "ESR_expression.RDS")
+write.table(ESR_expression, "ESR_expression.tsv", sep = "\t")
