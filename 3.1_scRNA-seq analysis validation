@@ -1,0 +1,308 @@
+path <- "C:/Users/lorig/OneDrive/Desktop/Thesis/1_Methods_Input/Scripts/1.4_scRNAseq_Bcell-Tcell-myeloid_analysis/validation/5b"
+setwd (path)
+
+install.packages("anndata")
+library(anndata)
+library(tidyverse)
+library(ggpubr)
+library(Seurat)
+
+# Load of epithelial data ====
+
+validation_epithelial <- read_h5ad(file.path(path, "epi_log_counts02_v2.h5ad"))
+
+metadata <- validation_epithelial$obs
+x <- validation$X
+
+counts <- x[, c("ESR1", "ESR2")]
+write.table (counts, "counts_epithelial.tsv", sep = "\t", quote = F)
+counts <- read.delim (file.path(path, "counts_epithelial.tsv"))
+counts <- rownames_to_column (counts, "cellID")
+
+metadata <- subset(metadata, select = c("Diagnosis", "Age", "Region code", "Gender", "category", "annotation"))
+metadata <- rownames_to_column(metadata, "cellID")
+
+epithelial <- merge (counts, metadata, by = "cellID")
+epithelial <- subset(epithelial, !(Diagnosis %in% c("fetal", "Pediatric Crohn Disease", "Pediatric healthy")))
+epithelial <- pivot_longer(epithelial, cols = c("ESR1", "ESR2"), values_to = "expression", names_to = "gene")
+epithelial$gene <- factor(epithelial$gene)
+
+write.table(epithelial, "epithelial_validation_data.tsv", sep = "\t", quote = F)
+
+# Load of Mesenchymal data ====
+
+validation_mesenchymal <- read_h5ad(file.path(path, "Mesenchyme_log_counts02_v2.h5ad"))
+
+metadata <- validation_mesenchymal$obs
+metadata <- subset(metadata, select = c("Diagnosis", "Age", "Region code", "Gender", "annotation"))
+metadata <- rownames_to_column(metadata, "cellID")
+metadata$category <- "mesenchymal"
+metadata$category <- factor(metadata$category)
+
+x <- validation$X
+counts <- x[, c("ESR1", "ESR2")]
+write.table (counts, "counts_mesenchymal.tsv", sep = "\t", quote = F)
+counts <- read.delim (file.path(path, "counts_mesenchymal.tsv"))
+counts <- rownames_to_column (counts, "cellID")
+
+mesenchymal <- merge (counts, metadata, by = "cellID")
+mesenchymal <- subset(mesenchymal, !(Diagnosis %in% c("fetal", "Pediatric Crohn Disease", "Pediatric healthy")))
+mesenchymal <- pivot_longer(mesenchymal, cols = c("ESR1", "ESR2"), values_to = "expression", names_to = "gene")
+mesenchymal$gene <- factor(mesenchymal$gene)
+
+write.table(mesenchymal, "mesenchymal_validation_data.tsv", sep = "\t", quote = F)
+
+# Load of myeloid data ====
+
+validation_myeloid <- read_h5ad(file.path(path, "myeloid_log_counts02_v2.h5ad"))
+
+metadata <- validation_myeloid$obs
+metadata <- subset(metadata, select = c("Diagnosis", "Age", "Region code", "Gender", "annotation"))
+metadata <- rownames_to_column(metadata, "cellID")
+metadata$category <- "myeloid"
+metadata$category <- factor(metadata$category)
+
+x <- validation$X
+counts <- x[, c("ESR1", "ESR2")]
+write.table (counts, "counts_myeloid.tsv", sep = "\t", quote = F)
+counts <- read.delim (file.path(path, "counts_myeloid.tsv"))
+counts <- rownames_to_column (counts, "cellID")
+
+myeloid <- merge (counts, metadata, by = "cellID")
+myeloid <- subset(myeloid, !(Diagnosis %in% c("fetal", "Pediatric Crohn Disease", "Pediatric healthy")))
+myeloid <- pivot_longer(myeloid, cols = c("ESR1", "ESR2"), values_to = "expression", names_to = "gene")
+myeloid$gene <- factor(myeloid$gene)
+
+write.table (myeloid, "myeloid_validation_data.tsv", sep = "\t", quote = F)
+
+# Load of B cells data ====
+
+validation_Bcell <- read_h5ad(file.path(path, "Bcell_log_counts02_v2.h5ad"))
+
+metadata <- validation_Bcell$obs
+metadata <- subset(metadata, select = c("Diagnosis", "Age", "Region code", "Gender", "annotation"))
+metadata <- rownames_to_column(metadata, "cellID")
+metadata$category <- "Bcell"
+metadata$category <- factor(metadata$category)
+
+x <- validation$X
+counts <- x[, c("ESR1", "ESR2")]
+write.table (counts, "counts_Bcell.tsv", sep = "\t", quote = F)
+counts <- read.delim (file.path(path, "counts_Bcell.tsv"))
+counts <- rownames_to_column (counts, "cellID")
+
+Bcell <- merge (counts, metadata, by = "cellID")
+Bcell <- subset(Bcell, !(Diagnosis %in% c("fetal", "Pediatric Crohn Disease", "Pediatric healthy")))
+Bcell <- pivot_longer(Bcell, cols = c("ESR1", "ESR2"), values_to = "expression", names_to = "gene")
+Bcell$gene <- factor(Bcell$gene)
+
+write.table (Bcell, "Bcell_validation_data.tsv", sep = "\t", quote = F)
+
+# Load of T cell data ====
+
+validation_Tcell <- read_h5ad(file.path(path, "Tcell_log_counts02_v2.h5ad"))
+
+metadata <- validation_Tcell$obs
+metadata <- subset(metadata, select = c("Diagnosis", "Age", "Region code", "Gender", "annotation"))
+metadata <- rownames_to_column(metadata, "cellID")
+metadata$category <- "Tcell"
+metadata$category <- factor(metadata$category)
+
+x <- validation$X
+counts <- x[, c("ESR1", "ESR2")]
+write.table (counts, "counts_Tcell.tsv", sep = "\t", quote = F)
+counts <- read.delim (file.path(path, "counts_Tcell.tsv"))
+counts <- rownames_to_column (counts, "cellID")
+
+Tcell <- merge (counts, metadata, by = "cellID")
+Tcell <- subset(Tcell, !(Diagnosis %in% c("fetal", "Pediatric Crohn Disease", "Pediatric healthy")))
+Tcell <- pivot_longer(Tcell, cols = c("ESR1", "ESR2"), values_to = "expression", names_to = "gene")
+Tcell$gene <- factor(Tcell$gene)
+
+write.table (Tcell, "Tcell_validation_data.tsv", sep = "\t", quote = F)
+
+# Analysis and creation of the plots ====
+
+total <- rbind(epithelial, mesenchymal, myeloid, Bcell, Tcell)
+
+total$`Region code` <- droplevels (total$`Region code`)
+total$`Region code` <- as.character(total$`Region code`)
+total$`Region code` <- ifelse(total$`Region code` == "ILE1", 
+                              "ILE", total$`Region code`)
+total$`Region code` <- ifelse(total$`Region code` == "ILE2", 
+                              "ILE", total$`Region code`)
+total$`Region code` <- ifelse(total$`Region code` == "TIL",
+                              "ILE", total$`Region code`)
+total$`Region code`<- factor(total$`Region code`)
+
+total <- subset(total, !(total$`Region code` %in% "MLN"))
+
+levels(total$`Region code`) <- c("ascending colon", "appendix", "caecum", "descending colon", "duodenum", "ileum", "jejunum", "rectum", "sigmoid colon", "transverse colon")
+total$`Region code` <- factor(total$`Region code`,
+                              levels = c("duodenum", "jejunum", "ileum", "mesenteric lymph node", "caecum", "appendix", "ascending colon", "transverse colon", "descending colon", "sigmoid colon", "rectum"))
+
+total$annotation <- as.character(total$annotation)
+
+total$annotation <- ifelse(total$annotation == "TA", 
+                           "transit-amplifying cells", total$annotation)
+total$annotation <- ifelse(total$annotation == "EC cells (TAC1+)", 
+                           "enteroendocrine cells", total$annotation)
+total$annotation <- ifelse(total$annotation == "EECs", 
+                           "enteroendocrine cells", total$annotation)
+total$annotation <- ifelse(total$annotation == "M/X cells (MLN/GHRL+)", 
+                           "enteroendocrine cells", total$annotation)
+total$annotation <- ifelse(total$annotation == "L cells (PYY+)", 
+                           "enteroendocrine cells", total$annotation)
+total$annotation <- ifelse(total$annotation == "I cells (CCK+)",
+                           "enteroendocrine cells", total$annotation)
+total$annotation <- ifelse(total$annotation == "D cells (SST+)", 
+                           "enteroendocrine cells", total$annotation)
+total$annotation <- ifelse(total$annotation == "K cells (GIP+)", 
+                           "enteroendocrine cells", total$annotation)
+total$annotation <- ifelse(total$annotation == "N cells (NTS+)", 
+                           "enteroendocrine cells", total$annotation)
+total$annotation <- ifelse(total$annotation == "Stromal 1 (ADAMDEC1+)", 
+                           "Stromal 1", total$annotation)
+total$annotation <- ifelse(total$annotation == "Stromal 1 (CCL11+)", 
+                           "Stromal 1", total$annotation)
+total$annotation <- ifelse(total$annotation == "Stromal 2 (NPY+)", 
+                           "Stromal 2", total$annotation)
+total$annotation <- ifelse(total$annotation == "Stromal 2 (CH25H+)", 
+                           "Stromal 2", total$annotation)
+total$annotation <- ifelse(total$annotation == "Transitional Stromal 3 (C3+)", 
+                           "Stromal 3", total$annotation)
+total$annotation <- ifelse(total$annotation == "Stromal 3 (C7+)", 
+                           "Stromal 3", total$annotation)
+total$annotation <- ifelse(total$annotation == "FDC", 
+                           "Follicular dendritic cells", total$annotation)
+total$annotation <- ifelse(total$annotation == "Contractile pericyte (PLN+)", 
+                           "Contractile pericyte", total$annotation)
+total$annotation <- ifelse(total$annotation == "myofibroblast (RSPO2+)", 
+                           "myofibroblast", total$annotation)
+total$annotation <- ifelse(total$annotation == "CLC+ Mast cell", 
+                           "Mast cell", total$annotation)
+total$annotation <- ifelse(total$annotation == "cDC1", 
+                           "Dendritic cell cDC1", total$annotation)
+total$annotation <- ifelse(total$annotation == "cDC2", 
+                           "Dendritic cell cDC2", total$annotation)
+total$annotation <- ifelse(total$annotation == "pDC", 
+                           "plasmacytoid Dendritic cells", total$annotation)
+total$annotation <- ifelse(total$annotation == "STAT1+ Naive B", 
+                           "Naive B", total$annotation)
+total$annotation <- ifelse(total$annotation == "GC B cell", 
+                           "Germinal Center B cell", total$annotation)
+total$annotation <- ifelse(total$annotation == "LZ GC cell", 
+                           "Light zone germinal center cells", total$annotation)
+total$annotation <- ifelse(total$annotation == "DZ GC cell", 
+                           "Dark zone germinal center cells", total$annotation)
+total$annotation <- ifelse(total$annotation == "TRGV2 gdT", 
+                           "gamma-delta T cell", total$annotation)
+total$annotation <- ifelse(total$annotation == "TRGV4 gdT", 
+                           "gamma-delta T cell", total$annotation)
+total$annotation <- ifelse(total$annotation == "TRGV5/7 gdT", 
+                           "gamma-delta T cell", total$annotation)
+total$annotation <- ifelse(total$annotation == "gdT", 
+                           "gamma-delta T cell", total$annotation)
+total$annotation <- ifelse(total$annotation == "Tfh", 
+                           "Follicular T helper cell", total$annotation)
+total$annotation <- ifelse(total$annotation == "ILC3", 
+                           "Innate lymphoid cell type 3", total$annotation)
+total$annotation <- ifelse(total$annotation == "FCRL4+ Memory B", 
+                           "Memory B", total$annotation)
+
+total <- subset(total, !(annotation %in% c("Progenitor (NEUROG3+)", "Stromal 4 (MMP1+)", "mLTo")))
+
+total$annotation <- factor(total$annotation)
+
+total$tissue_type <- total$`Region code`
+levels(total$tissue_type)
+total$tissue_type <- as.character(total$tissue_type)
+total$tissue_type <- ifelse(total$tissue_type == "duodenum", 
+                            "Small intestine", total$tissue_type)
+total$tissue_type <- ifelse(total$tissue_type == "jejunum", 
+                            "Small intestine", total$tissue_type)
+total$tissue_type <- ifelse(total$tissue_type == "ileum", 
+                            "Small intestine", total$tissue_type)
+total$tissue_type <- ifelse(total$tissue_type == "caecum", 
+                            "Large intestine", total$tissue_type)
+total$tissue_type <- ifelse(total$tissue_type == "appendix", 
+                            "Large intestine", total$tissue_type)
+total$tissue_type <- ifelse(total$tissue_type == "ascending colon", 
+                            "Large intestine", total$tissue_type)
+total$tissue_type <- ifelse(total$tissue_type == "transverse colon", 
+                            "Large intestine", total$tissue_type)
+total$tissue_type <- ifelse(total$tissue_type == "descending colon", 
+                            "Large intestine", total$tissue_type)
+total$tissue_type <- ifelse(total$tissue_type == "sigmoid colon", 
+                            "Large intestine", total$tissue_type)
+total$tissue_type <- ifelse(total$tissue_type == "rectum", 
+                            "Large intestine", total$tissue_type)
+total$tissue_type <- factor(total$tissue_type, levels = c("Small intestine", "Large intestine"))
+
+summary <- total %>%
+  group_by(gene, annotation, `Region code`, category, tissue_type) %>%
+  summarise(
+    pct_expr = (sum(expression > 0)/n())*100,
+    mean = log1p(mean(expression)), 
+    n = n(),
+    n_pos = sum (expression > 0),
+    expression = sum (expression),
+    .groups = "drop"
+  ) %>%
+  filter(n >= 20)
+
+ggplot(summary, aes(gene, annotation))+
+  geom_point(aes(size = pct_expr, colour = (mean)))+
+  scale_color_viridis_c(option = "viridis",
+                        limits = c(0.0004, 0.35))+
+  facet_grid(category ~ `Region code`, 
+             scales = "free_y", 
+             labeller = label_wrap_gen(width = 10)
+             )+
+  theme_bw()+
+  theme (
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    strip.text.x = element_text(size = 8)
+  )+
+  labs (
+    x = "Gene",
+    y = "Cell Type",
+    size = "% of Expressing cells",
+    colour = "Avarage of expression"
+  )+
+  ggtitle ("scRNAseq analysis validation")
+
+library(RColorBrewer)
+
+color <- colorRampPalette(brewer.pal(9, "GnBu") [3:8]) (5)
+barplot(rep(1, length(color)), col = color, axes = F, border = NA)
+
+ggplot(summary, aes(category, pct_expr, fill = category)) +
+  geom_boxplot() +
+  facet_grid(cols = vars(tissue_type), rows = vars(gene),
+             scales = "free_y",
+             labeller = label_wrap_gen(width = 10)) +
+  scale_fill_manual(values = color) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  geom_pwc(method = "wilcox.test", label = "p.signif", hide.ns = TRUE)+
+  labs(
+    x = "Lineage",
+    y = " Fraction of expressing cells (%)",
+    fill = "Lineage"
+  )
+
+ggplot(summary, aes(category, log10(expression), fill = category)) +
+  geom_boxplot() +
+  facet_grid(cols = vars(tissue_type), rows = vars(gene),
+             scales = "free_y",
+             labeller = label_wrap_gen(width = 10)) +
+  scale_fill_manual(values = color) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  geom_pwc(method = "wilcox.test", label = "p.signif", hide.ns = TRUE)+
+  labs(
+    x = "Lineage",
+    y = " Fraction of expressing cells (%)",
+    fill = "Lineage"
+  )
