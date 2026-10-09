@@ -1,0 +1,160 @@
+path <- "C:/Users/lorig/OneDrive/Desktop/Thesis/1_Methods_Input/Scripts/1.4_scRNAseq_Bcell-Tcell-myeloid_analysis/validation"
+
+setwd (path)
+library(tidyverse)
+library(ggpubr)
+library(Matrix)
+library(Seurat)
+library(anndata)
+
+# Validation of scRNAseq analysis regarding the immune lineage ====
+
+## Load of the data ====
+validation <- read_h5ad(file.path(path, "Colon_cell_atlas.h5ad"))
+obs <- validation$obs
+counts <- validation$X
+counts <- counts[, c("ESR1", "ESR2")]
+counts <- as.matrix(counts)
+write.table(counts, "counts.tsv", sep = "\t", quote = F)
+counts <- read.delim(file.path(path, "counts.tsv"))
+counts <- rownames_to_column(counts, "cellID")
+
+obs <- rownames_to_column(obs, "cellID")
+counts <- merge(counts, obs, by = "cellID")
+counts <- pivot_longer(counts, cols = c("ESR1", "ESR2"), values_to = "expression", names_to = "gene")
+counts$gene <- factor(counts$gene)
+
+counts <- subset(counts, select = c("cellID", "region", "cell_type", "gene", "expression"))
+
+counts$lineage <- counts$cell_type
+levels(counts$lineage)
+counts$lineage <- as.character(counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "Activated CD4 T", 
+                         "T cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "Tcm", 
+                         "T cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "Tfh", 
+                         "T cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "Th1", 
+                         "T cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "Th17", 
+                         "T cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "Treg", 
+                         "T cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "B cell memory", 
+                         "B cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "Follicular B cell", 
+                         "B cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "B cell IgA Plasma", 
+                         "B cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "B cell IgG Plasma", 
+                         "B cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "B cell cycling", 
+                         "B cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "CD8 T", 
+                         "T cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "cDC2", 
+                         "myeloid", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "cDC1", 
+                         "myeloid", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "cycling DCs", 
+                         "myeloid", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "gd T", 
+                         "T cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "cycling gd T", 
+                         "T cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "ILC", 
+                         "T cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "Monocyte", 
+                         "myeloid", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "Mast", 
+                         "myeloid", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "Macrophage", 
+                         "myeloid", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "LYVE1 Macrophage", 
+                         "myeloid", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "NK", 
+                         "T cell", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "pDC", 
+                         "myeloid", counts$lineage)
+counts$lineage <- ifelse(counts$lineage == "Lymphoid DC", 
+                        "myeloid", counts$lineage)
+counts$lineage <- factor(counts$lineage)
+
+counts <- subset(counts, !(counts$region %in% "mLN"))
+
+## creation of the plot ====
+
+c_summary <- counts %>%
+  group_by(region, cell_type, gene, lineage) %>%
+  summarise(
+    n = n(),
+    n_pos = sum(expression > 0),
+    pct_expr = (sum(expression > 0)/n())*100,
+    mean = log1p(mean(expression)),
+    expression = sum (expression),
+    .groups = "drop"
+  ) %>%
+  filter (n >= 15)
+
+ggplot(c_summary, aes(x = n)) +
+  geom_histogram(bins = 50) +
+  scale_x_log10() +
+  theme_minimal()
+
+levels(c_summary$region)
+c_summary$region <- droplevels(c_summary$region)
+c_summary$region <- factor(c_summary$region, levels = c("Caecum", "Transverse", "Sigmoid"))
+
+ggplot(c_summary, aes(gene, cell_type))+
+  geom_point(aes(size = pct_expr, colour = mean))+
+  scale_color_viridis_c(option = "viridis",
+                        limits = c(0.0005, 0.08),
+                        breaks = seq(0.00, 0.08, by = 0.015))+
+  facet_grid( lineage ~ region, scale = "free_y")+
+  theme_bw()+
+  theme (
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)
+  )+
+  labs (
+    x = "Gene",
+    y = "Cell Type",
+    size = "% of Expressing cells",
+    colour = "Avarage of expression"
+  )+
+  ggtitle ("scRNAseq analysis of colon immune lineage")
+
+library(RColorBrewer)
+color <- colorRampPalette(brewer.pal(9, "GnBu")) (6)
+barplot(rep(1, length (color)), col = color, axes = F, border = NA)
+color <- color[3:5]
+
+ggplot(c_summary, aes(lineage, pct_expr, fill = lineage)) +
+  geom_boxplot() +
+  facet_grid(cols = vars(region), rows = vars(gene),
+             scales = "free_y",
+             labeller = label_wrap_gen(width = 10)) +
+  scale_fill_manual(values = color) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  geom_pwc(method = "wilcox.test", label = "p.signif", hide.ns = TRUE)+
+  labs(
+    x = "Lineage",
+    y = " Fraction of expressing cells (%)",
+    fill = "Lineage"
+  )
+
+ggplot(c_summary, aes(lineage, log10(expression), fill = lineage)) +
+  geom_boxplot() +
+  facet_grid(cols = vars(region), rows = vars(gene),
+             scales = "free_y",
+             labeller = label_wrap_gen(width = 10)) +
+  scale_fill_manual(values = color) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  geom_pwc(method = "wilcox.test", label = "p.signif", hide.ns = TRUE, y.position = 0.8)+
+  labs(
+    x = "Lineage",
+    y = "Log10 (ESR gene expression)",
+    fill = "Lineage"
+  )
