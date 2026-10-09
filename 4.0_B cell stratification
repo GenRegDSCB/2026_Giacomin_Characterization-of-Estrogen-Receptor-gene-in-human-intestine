@@ -1,0 +1,539 @@
+path <- "C:/Users/lorig/OneDrive/Desktop/Thesis/1_Methods_Input/Scripts/1.6_stratification"
+setwd(path)
+
+library(tidyverse)
+library (ggpubr)
+library(RColorBrewer)
+library (Seurat)
+
+Bcell.data <- readRDS(file.path(path, "6_Healthy_Pan-GI_atlas_B_20241119.rds"))
+
+# Loading and processing of the data about B cells ====
+
+Bcell <- read.delim(file.path(path, "Bcell.tsv"))
+Bcell <- rownames_to_column (Bcell, "cellID")
+
+metadata <- select(Bcell.data@meta.data, c ("cell_type", "disease", "sex", "tissue", "organ_groups", "development_stage", "age_unified"))
+metadata <- rownames_to_column(metadata, "cellID")
+
+Bcell <- merge(Bcell, metadata, by = "cellID")
+
+Bcell <- pivot_longer(Bcell, cols = c("ENSG00000091831", "ENSG00000140009"),
+                      values_to = "expression", names_to = "gene")
+
+Bcell$gene <- factor(Bcell$gene, labels = c("ESR1", "ESR2"))
+
+Bcell <- subset(Bcell, !(development_stage %in% c("10th week post-fertilization stage", "11th week post-fertilization stage", "12th week post-fertilization stage", "13th week post-fertilization stage", "15th week post-fertilization stage", "16th week post-fertilization stage", "17th week post-fertilization stage", "18th week post-fertilization stage", "19th week post-fertilization stage", "9th week post-fertilization stage",  "10-year-old stage", "12-year-old stage", "2-month-old stage", "4-year-old stage", "9-year-old stage", "juvenile stage (5-14 yo)", "pediatric stage", "newborn stage (0-28 days)", "6-year-old stage")))
+
+Bcell <- subset(Bcell, !(sex %in% "unknown"))
+Bcell$sex <- factor(Bcell$sex)
+
+Bcell <- subset(Bcell, !(tissue %in% c("body of stomach", "buccal mucosa", "epithelium of esophagus", "epithelium of stomach", "esophagus", "gingiva", "gingiva", "periodontium", "pyloric antrum", "stomach", "parotid gland", "pylorus", "labial gland", "mesenteric lymph node")))
+
+Bcell$tissue <- as.character(Bcell$tissue)
+
+Bcell$tissue <- ifelse (Bcell$tissue == "colonic epithelium", 
+                        "colon", Bcell$tissue)
+Bcell$tissue <- ifelse (Bcell$tissue == "colonic mucosa", 
+                        "colon", Bcell$tissue)
+Bcell$tissue <- ifelse (Bcell$tissue == "duodenal epithelium", 
+                        "duodenum", Bcell$tissue)
+Bcell$tissue <- ifelse (Bcell$tissue == "epithelium of rectum", 
+                        "rectum", Bcell$tissue)
+Bcell$tissue <- ifelse (Bcell$tissue == "ileal epithelium", 
+                        "ileum", Bcell$tissue)
+Bcell$tissue <- ifelse (Bcell$tissue == "ileum lamina propria", 
+                        "ileum", Bcell$tissue)
+Bcell$tissue <- ifelse (Bcell$tissue == "lamina propria of mucosa of colon", 
+                        "colon", Bcell$tissue)
+Bcell$tissue <- ifelse (Bcell$tissue == "rectosigmoid junction", 
+                        "rectum", Bcell$tissue)
+Bcell$tissue <- factor(Bcell$tissue, levels = c("small intestine", "duodenum", "jejunum", "ileum", "colon", "caecum", "vermiform appendix", "ascending colon", "transverse colon", "descending colon", "sigmoid colon", "rectum"))
+
+Bcell$age_unified <- as.character(Bcell$age_unified)
+Bcell$development_stage <- as.character(Bcell$development_stage)
+
+Bcell$age_unified <- ifelse(Bcell$development_stage == "31-year-old stage", "18-34", Bcell$age_unified)
+Bcell$age_unified <- ifelse(Bcell$development_stage == "seventh decade stage", "55-74", Bcell$age_unified)
+Bcell$age_unified <- ifelse(Bcell$development_stage == "sixth stage", "55-74", Bcell$age_unified)
+
+Bcell$age_unified <- ifelse(Bcell$development_stage == "74-year-old stage", "55-74", Bcell$age_unified)
+Bcell$age_unified <- ifelse(Bcell$development_stage == "prime adult stage", "18-34", Bcell$age_unified)
+
+Bcell$development_stage <- factor(Bcell$development_stage)
+
+Bcell$age_unified <- factor (Bcell$age_unified)
+
+Bcell$age_unified <- factor (Bcell$age_unified,
+                             levels = c("18-34", "35-54", "55-74", "75+"))
+
+Bcell$cell_type <- as.character(Bcell$cell_type)
+Bcell$cell_type <- ifelse(Bcell$cell_type == "pro-B cell", "precursor B cell", Bcell$cell_type)
+
+Bcell$cell_type <- factor(Bcell$cell_type, levels = c("precursor B cell","naive B cell", "germinal center B cell", "memory B cell", "plasmablast","IgM plasma cell", "IgG plasma cell", "IgA plasma cell"))
+
+Bcell$organ_groups <- factor(Bcell$organ_groups, labels = c("Large Intestine", "Small Intestine"))
+
+Bcell$organ_groups <- factor(Bcell$organ_groups, levels = c("Small Intestine","Large Intestine"))
+
+
+
+## Creation of the dotplot and boxplot and related to the fraction of cells expressing ESR1/2 in Bcell lineage ====
+
+summary <- Bcell %>%
+  group_by(gene, cell_type, organ_groups, tissue) %>%
+  summarise(
+    n = n(),
+    n_pos = sum(expression > 0),
+    pct_expr = (sum(expression > 0)/n())*100,
+    mean = log1p(mean(expression)),
+    expression = sum(expression),
+    .groups = "drop"
+  )%>%
+  filter(n >= 10)
+
+ggplot(summary, aes(x = n)) +
+  geom_histogram(bins = 50)+
+  scale_x_log10() +
+  theme_minimal()
+
+ggplot(summary, aes(gene, cell_type))+
+  geom_point(aes(size = pct_expr, colour = mean)) +
+  scale_color_viridis_c(limits = c(0.001, 0.30),
+                        breaks = seq(0, 0.30, by = 0.05))+
+  facet_wrap(~ tissue, labeller = label_wrap_gen(width = 10), nrow = 1)+
+  scale_size_continuous(
+    breaks = seq(0, 30, by = 10),
+    limits = c(0, 30)) +
+  theme_bw()+
+  theme (
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+    strip.text.x = element_text(size = 8)
+  )+
+  labs(
+    x = "Gene",
+    y = "Cell type",
+    size = "% of expressing cells",
+    colour = "Avarage expression"
+  )
+
+color <- colorRampPalette(brewer.pal(9, "GnBu")) (11)
+barplot(rep(1, length (color)), col = color, axes = F, border = NA)
+color <- color[3:10]
+
+ggplot(summary, aes(cell_type, pct_expr, fill = cell_type)) +
+  geom_boxplot() +
+  facet_grid(cols = vars(organ_groups), rows = vars(gene),
+             scales = "free_y",
+             labeller = label_wrap_gen(width = 10)) +
+  scale_fill_manual(values = color) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  geom_pwc(method = "wilcox.test", label = "p.signif", hide.ns = TRUE)+
+  labs(
+    x = "Lineage",
+    y = " Fraction of expressing cells (%)",
+    fill = "Lineage"
+  )
+
+ggplot(summary, aes(cell_type, log10(expression), fill = cell_type)) +
+  geom_boxplot() +
+  facet_grid(cols = vars(organ_groups), rows = vars(gene),
+             scales = "free_y",
+             labeller = label_wrap_gen(width = 10)) +
+  scale_fill_manual(values = color) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  geom_pwc(method = "wilcox.test", label = "p.signif", hide.ns = TRUE)+
+  labs(
+    x = "Lineage",
+    y = "Log10 (ESR gene expression)",
+    fill = "Lineage"
+  )
+
+### stratifying by sex ====
+sex_summary <- Bcell %>%
+  group_by(cell_type, gene, sex, organ_groups) %>%
+  filter(n() >= 10) %>%
+  summarise(
+    n = n(),
+    pct_expr = (sum(expression > 0)/n())*100,
+    mean = mean (expression),
+    expression = sum(expression),
+    .groups = "drop"
+  )
+
+ggplot(sex_summary, aes(sex, pct_expr, fill = sex))+
+  geom_boxplot()+
+  scale_fill_manual(values = c(color[1], color[5]))+
+  facet_grid(cols = vars (organ_groups), rows = vars (gene), 
+             scales = "free_y")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  geom_pwc(method = "wilcox.test", label = "p.signif", hide.ns = T) + 
+  labs(
+    x = "Sex",
+    fill = "Sex",
+    y = "Fraction of expressing cells (%)"
+  )
+
+ggplot(sex_summary, aes(sex, log10(expression), fill = sex))+
+  geom_boxplot()+
+  scale_fill_manual(values = c(color[1], color[5]))+
+  facet_grid(cols = vars (organ_groups), rows = vars (gene), 
+             scales = "free_y")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  geom_pwc(method = "wilcox.test", label = "p.signif", hide.ns = T) + 
+  labs(
+    x = "Sex",
+    fill = "Sex",
+    y = "Log10 (ESR gene expression)"
+  )
+
+### stratifying by age ====
+age_summary <- Bcell %>%
+  group_by(cell_type, gene, age_unified, organ_groups)%>%
+  filter(n() >= 10) %>%
+  summarise(
+    n = n(),
+    pct_expr = (sum(expression > 0)/n())*100,
+    mean = mean(expression),
+    expression = sum(expression),
+    .groups = "drop"
+  )
+
+ggplot(age_summary, aes(age_unified, pct_expr))+
+  geom_boxplot(aes(fill = age_unified))+
+  scale_fill_manual(values = color[3:7])+
+  facet_grid(rows = vars (gene), cols = vars (organ_groups), 
+             scales = "free_y")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  geom_pwc(method = "wilcox.test",label = "p.signif", hide.ns = T) +
+  labs(
+    x = "Age",
+    y = "Fraction of expressing cells (%)",
+    fill = "Age"
+  )
+
+ggplot(age_summary, aes(age_unified, log10(expression)))+
+  geom_boxplot(aes(fill = age_unified))+
+  scale_fill_manual(values = color[3:7])+
+  facet_grid(rows = vars (gene), cols = vars (organ_groups), 
+             scales = "free_y")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  geom_pwc(method = "wilcox.test",label = "p.signif", hide.ns = T) +
+  labs(
+    x = "Age",
+    y = "Log 10 (ESR gene expression)",
+    fill = "Age"
+  )
+## Creation of Barplots ====
+
+Bcell <- Bcell %>% 
+  pivot_wider(
+    id_cols = c(cellID, cell_type, disease, sex, tissue, organ_groups, development_stage, age_unified), 
+    names_from = "gene", 
+    values_from = "expression")
+
+Bcell <- mutate(Bcell, 
+                    ESR = case_when (
+                      Bcell$ESR1 > 0 &  Bcell$ESR2 > 0 ~ "ESR1_2", 
+                      Bcell$ESR1 > 0 &  Bcell$ESR2 == 0 ~ "ESR1",
+                      Bcell$ESR1 == 0 & Bcell$ESR2 > 0 ~ "ESR2",
+                      Bcell$ESR1 == 0 & Bcell$ESR2 == 0 ~ "ESR_neg"
+                    ))
+Bcell$ESR <- factor (Bcell$ESR, levels = c("ESR1_2", "ESR1", "ESR2", "ESR_neg"))
+
+Bcell2 <- subset(Bcell, !(cell_type %in% c("precursor B cell", "germinal center B cell", "plasmablast")))
+
+summary2 <- Bcell2 %>%
+  group_by(cell_type, ESR, organ_groups) %>%
+  summarise(
+    n = n(),
+    .groups =  "drop"
+  )
+
+ggplot (summary2, aes(ESR, n, fill = cell_type)) +
+  geom_bar(stat ="identity", position = "fill") +
+  scale_fill_manual(values = color [3:7]) +
+  facet_wrap(~ organ_groups, nrow = 1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(
+    x = "ESR expression status",
+    y = "Fraction of expressing cells",
+    fill = "Cell type"
+  )
+
+Bcell_tst <- chisq.test(Bcell2$ESR, Bcell2$cell_type)
+print(Bcell_tst)
+chisq.test(Bcell$ESR, Bcell$cell_type)$stdres
+chisq.test(Bcell$ESR, Bcell$cell_type)$expected
+cramerV(Bcell$ESR, Bcell$cell_type)
+#Pearson's Chi-squared test
+#data:  Bcell$ESR and Bcell$cell_type
+#X-squared = 1358, df = 21, p-value < 2.2e-16
+
+library (broom)
+install.packages("rcompanion")
+library(rcompanion)
+
+chisq_by_organ <- Bcell2 %>%
+  group_by(organ_groups) %>%
+  group_map(~ {
+    tab <- table(.x$cell_type, .x$ESR)
+    test <- chisq.test(tab)
+    list(table = tab, test = test, cramerV = cramerV(tab))
+  })
+names(chisq_by_organ) <- unique(Bcell$organ_groups)
+print(chisq_by_organ)
+
+chisq.test(Bcell2$ESR[Bcell2$organ_groups == "Small Intestine"], Bcell2$cell_type[Bcell2$organ_groups == "Small Intestine"])
+#Small Intestine
+#Pearson's Chi-squared test
+#X-squared = 627.72, df = 21, p-value < 2.2e-16
+
+chisq.test(Bcell2$ESR[Bcell2$organ_groups == "Large Intestine"], Bcell2$cell_type[Bcell2$organ_groups == "Large Intestine"])
+#Large Intestine
+#Pearson's Chi-squared test
+#X-squared = 745.27, df = 21, p-value < 2.2e-16
+
+
+### stratification by sex ====
+
+sex_summary2 <- Bcell2 %>%
+  group_by(ESR, sex, organ_groups, cell_type) %>%
+  summarise(
+    n = n(),
+    .groups = "drop"
+  )
+
+ggplot (sex_summary2, aes(ESR, n, fill = cell_type)) +
+  geom_bar(stat ="identity", position = "fill") +
+  scale_fill_manual(values = color[3:7])+
+  facet_grid(cols = vars(organ_groups), rows = vars(sex))+
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(
+    x = "ESR expression",
+    y = "Fraction of expressing cells",
+    fill = "Cell type"
+  )
+
+chisq.test(Bcell$ESR, Bcell$sex)
+#Pearson's Chi-squared test
+#data:  Bcell$ESR and Bcell$sex
+#X-squared = 137.25, df = 3, p-value < 2.2e-16
+
+sex_test <- Bcell %>%
+  group_by(organ_groups, sex) %>%
+  group_modify(~ {
+    tab <- table(.x$ESR, .x$cell_type)
+    test <- chisq.test(tab)
+    tibble(
+      chi_sq = test$statistic,
+      df = test$parameter,
+      p_value = test$p.value,
+      cramerV = cramerV(tab)
+    )
+  })
+
+print (sex_test)
+
+chisq.test(Bcell2$ESR[Bcell2$organ_groups %in% c("Small Intestine") & Bcell2$sex == "female"], Bcell2$cell_type[Bcell2$organ_groups %in% c("Small Intestine") & Bcell2$sex == "female"])
+#Pearson's Chi-squared test
+#X-squared = 213.25, df = 21, p-value < 2.2e-16
+
+chisq.test(Bcell2$ESR[Bcell2$organ_groups %in% c("Large Intestine") & Bcell2$sex == "female"], Bcell2$cell_type[Bcell2$organ_groups %in% c("Large Intestine") & Bcell2$sex == "female"])
+#Pearson's Chi-squared test
+#X-squared = 338.42, df = 12, p-value < 2.2e-16
+
+chisq.test(Bcell2$ESR[Bcell2$organ_groups %in% c("Small Intestine") & Bcell2$sex == "male"], Bcell2$cell_type[Bcell2$organ_groups %in% c("Small Intestine") & Bcell2$sex == "male"])
+#Pearson's Chi-squared test
+#X-squared = 191.98, df = 21, p-value < 2.2e-16
+
+chisq.test(Bcell2$ESR[Bcell2$organ_groups %in% c("Large Intestine") & Bcell2$sex == "male"], Bcell2$cell_type[Bcell2$organ_groups %in% c("Large Intestine") & Bcell2$sex == "male"])
+#Pearson's Chi-squared test
+#X-squared = 413.85, df = 21, p-value < 2.2e-16
+
+### stratification by age ==== 
+Bcell2$age <- as.character (Bcell2$age_unified)
+Bcell2$age <- ifelse (Bcell2$age == "18-34", "18-54", Bcell2$age)
+Bcell2$age <- ifelse (Bcell2$age == "35-54", "18-54", Bcell2$age)
+Bcell2$age <- ifelse (Bcell2$age == "55-74", "55-75", Bcell2$age)
+Bcell2$age <- ifelse (Bcell2$age == "75+", "55-75", Bcell2$age)
+Bcell2$age <- factor(Bcell2$age, levels = c("18-54", "55-75"))
+
+age_summary2 <- Bcell2 %>%
+  group_by(ESR, age, cell_type, organ_groups) %>%
+  summarise(
+    n = n(),
+    .groups = "drop"
+  )
+
+ggplot (age_summary2, aes(ESR, n, fill = cell_type)) +
+  geom_bar(stat ="identity", position = "fill") +
+  scale_fill_manual(values = color[3:7])+
+  facet_grid(cols = vars(organ_groups), rows = vars(age))+
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(
+    x = "ESR expression",
+    y = "Fraction of expressing cells",
+    fill = "Cell type"
+  )
+
+chisq.test(Bcell$ESR, Bcell$age_unified)
+#Pearson's Chi-squared test
+#data:  Bcell$ESR and Bcell$age_unified
+#X-squared = 557.12, df = 9, p-value < 2.2e-16
+
+age_test <- Bcell %>%
+  group_by(organ_groups, age) %>%
+  group_modify(~ {
+    tab <- table(.x$ESR, .x$cell_type)
+    test <- chisq.test(tab)
+    tibble(
+      chi_sq = test$statistic,
+      df = test$parameter,
+      p_value = test$p.value,
+      cramerV = cramerV(tab)
+    )
+  })
+
+chisq.test(Bcell2$ESR[Bcell2$organ_groups %in% c("Small Intestine") & Bcell2$age == "18-54"], Bcell2$cell_type[Bcell2$organ_groups %in% c("Small Intestine") & Bcell2$age == "18-54"])
+#Pearson's Chi-squared test
+#X-squared = 620.98, df = 12, p-value < 2.2e-16
+
+chisq.test(Bcell2$ESR[Bcell2$organ_groups %in% c("Large Intestine") & Bcell2$age == "18-54"], Bcell2$cell_type[Bcell2$organ_groups %in% c("Large Intestine") & Bcell2$age == "18-54"])
+#Pearson's Chi-squared test
+#X-squared = 565.14, df = 12, p-value < 2.2e-16
+
+chisq.test(Bcell2$ESR[Bcell2$organ_groups %in% c("Small Intestine") & Bcell2$age == "55-75"], Bcell2$cell_type[Bcell2$organ_groups %in% c("Small Intestine") & Bcell2$age == "55-75"])
+#Pearson's Chi-squared test
+#X-squared = 21.84, df = 12, p-value = 0.03936
+
+chisq.test(Bcell2$ESR[Bcell2$organ_groups %in% c("Large Intestine") & Bcell2$age == "55-75"], Bcell2$cell_type[Bcell2$organ_groups %in% c("Large Intestine") & Bcell2$age == "55-75"])
+#Pearson's Chi-squared test
+#X-squared = 193.19, df = 12, p-value < 2.2e-16
+
+### focus on women ==== 
+
+menopausal <- subset (Bcell2, Bcell2$sex == "female")
+menopausal$menopause_status <- as.character (menopausal$development_stage)
+
+menopausal$menopause_status <- ifelse (menopausal$menopause_status == "23-year-old stage", "pre menopausal", menopausal$menopause_status)
+menopausal$menopause_status <- ifelse (menopausal$menopause_status == "29-year-old stage", "pre menopausal", menopausal$menopause_status)
+menopausal$menopause_status <- ifelse (menopausal$menopause_status == "30-year-old stage", "pre menopausal", menopausal$menopause_status)
+menopausal$menopause_status <- ifelse (menopausal$menopause_status == "33-year-old stage", "pre menopausal", menopausal$menopause_status)
+menopausal$menopause_status <- ifelse (menopausal$menopause_status == "third decade stage", "pre menopausal", menopausal$menopause_status)
+
+
+menopausal$menopause_status <- ifelse (menopausal$menopause_status == "50-year-old stage", "post menopausal", menopausal$menopause_status)
+menopausal$menopause_status <- ifelse (menopausal$menopause_status == "65-year-old stage", "post menopausal", menopausal$menopause_status)
+menopausal$menopause_status <- ifelse (menopausal$menopause_status == "77-year-old stage", "post menopausal", menopausal$menopause_status)
+menopausal$menopause_status <- ifelse (menopausal$menopause_status == "81-year-old stage", "post menopausal", menopausal$menopause_status)
+menopausal$menopause_status <- ifelse (menopausal$menopause_status == "86-year-old stage", "post menopausal", menopausal$menopause_status)
+menopausal$menopause_status <- ifelse (menopausal$menopause_status == "eighth decade stage", "post menopausal", menopausal$menopause_status)
+menopausal$menopause_status <- ifelse (menopausal$menopause_status == "seventh decade stage", "post menopausal", menopausal$menopause_status)
+menopausal$menopause_status <- ifelse (menopausal$menopause_status == "sixth decade stage", "post menopausal", menopausal$menopause_status)
+
+menopausal$menopause_status <- factor(menopausal$menopause_status, levels = c("pre menopausal", "post menopausal"))
+
+menopausal<- mutate(menopausal, 
+            ESR = case_when (
+              menopausal$ESR1 > 0 &  menopausal$ESR2 > 0 ~ "ESR1_2",
+              menopausal$ESR1 > 0 &  menopausal$ESR2 == 0 ~ "ESR1_2",
+              menopausal$ESR1 == 0 & menopausal$ESR2 > 0 ~ "ESR1_2",
+              menopausal$ESR1 == 0 & menopausal$ESR2 == 0 ~ "ESR_neg"
+              
+            ))
+menopausal$ESR <- factor (menopausal$ESR, levels = c("ESR1_2", "ESR_neg"))
+
+menopause_summary <- menopausal %>%
+  group_by(menopause_status, cell_type, organ_groups, ESR) %>%
+  summarise(
+    n = n(), 
+    .groups = "drop"
+  )
+
+ggplot (menopause_summary, aes(ESR, n, fill = cell_type)) +
+  geom_bar(stat ="identity", position = "fill") +
+  scale_fill_manual(values = color [3:7])+
+  facet_grid(cols = vars(organ_groups), rows = vars(menopause_status))+
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(
+    x = "ESR expression",
+    y = "Fraction of expressing cells",
+    fill = "Cell type"
+  )
+
+chisq.test(menopausal$ESR[menopausal$organ_groups == "Small Intestine" & menopausal$menopause_status == "pre menopausal"], menopausal$cell_type[menopausal$organ_groups == "Small Intestine" & menopausal$menopause_status == "pre menopausal"])
+#Pearson's Chi-squared test
+#X-squared = 110.19, df = 4, p-value < 2.2e-16
+
+chisq.test(menopausal$ESR[menopausal$organ_groups == "Large Intestine" & menopausal$menopause_status == "pre menopausal"], menopausal$cell_type[menopausal$organ_groups == "Large Intestine" & menopausal$menopause_status == "pre menopausal"])
+#Pearson's Chi-squared test
+#X-squared = 127.94, df = 4, p-value < 2.2e-16
+
+chisq.test(menopausal$ESR[menopausal$organ_groups == "Small Intestine" & menopausal$menopause_status == "post menopausal"], menopausal$cell_type[menopausal$organ_groups == "Small Intestine" & menopausal$menopause_status == "post menopausal"])
+#Pearson's Chi-squared test
+#X-squared = 13.907, df = 4, p-value = 0.007597
+
+chisq.test(menopausal$ESR[menopausal$organ_groups == "Large Intestine" & menopausal$menopause_status == "post menopausal"], menopausal$cell_type[menopausal$organ_groups == "Large Intestine" & menopausal$menopause_status == "post menopausal"])
+#Pearson's Chi-squared test
+#X-squared = 170.31, df = 4, p-value < 2.2e-16
+
+## focus on males ====
+
+males <- subset (Bcell2, Bcell2$sex == "male")
+
+males <- mutate(males, 
+            ESR = case_when (
+              males$ESR1 > 0 &  males$ESR2 > 0 ~ "ESR1_2", 
+              males$ESR1 > 0 &  males$ESR2 == 0 ~ "ESR1_2",
+              males$ESR1 == 0 & males$ESR2 > 0 ~ "ESR1_2",
+              males$ESR1 == 0 & males$ESR2 == 0 ~ "ESR_neg"
+              
+            ))
+males$ESR <- factor (males$ESR, levels = c("ESR1_2", "ESR_neg"))
+
+male_summary <- males %>%
+  group_by(age, cell_type, organ_groups, ESR) %>%
+  summarise(
+    n = n(), 
+    .groups = "drop"
+  ) 
+
+ggplot (male_summary, aes(ESR, n, fill = cell_type)) +
+  geom_bar(stat ="identity", position = "fill") +
+  scale_fill_manual(values = color[3:7])+
+  facet_grid(cols = vars(organ_groups), rows = vars(age))+
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(
+    x = "ESR expression",
+    y = "Fraction of expressing cells",
+    fill = "Cell type"
+  )
+
+chisq.test(males$ESR[males$age == "55-75" & males$organ_groups == "Small Intestine"], males$cell_type[males$age == "55-75" & males$organ_groups == "Small Intestine"])
+#Pearson's Chi-squared test
+#X-squared = 4.9428, df = 4, p-value = 0.2932
+
+chisq.test(males$ESR[males$age == "55-75" & males$organ_groups == "Large Intestine"], males$cell_type[males$age == "55-75" & males$organ_groups == "Large Intestine"])
+#Pearson's Chi-squared test
+#X-squared = 52.656, df = 4, p-value = 1.006e-10
+
+chisq.test(males$ESR[males$age == "18-54" & males$organ_groups == "Small Intestine"], males$cell_type[males$age == "18-54" & males$organ_groups == "Small Intestine"])
+#Pearson's Chi-squared test
+#X-squared = 176.87, df = 4, p-value < 2.2e-16
+
+chisq.test(males$ESR[males$age == "18-54" & males$organ_groups == "Large Intestine"], males$cell_type[males$age == "18-54" & males$organ_groups == "Large Intestine"])
+#Pearson's Chi-squared test
+#X-squared = 410.14, df = 4, p-value < 2.2e-16
+
