@@ -268,29 +268,6 @@ ggplot (summary2, aes(ESR, n, fill = cell_type)) +
     fill = "Cell type"
   )
 
-Bcell_tst <- chisq.test(Bcell2$ESR, Bcell2$cell_type)
-print(Bcell_tst)
-chisq.test(Bcell$ESR, Bcell$cell_type)$stdres
-chisq.test(Bcell$ESR, Bcell$cell_type)$expected
-cramerV(Bcell$ESR, Bcell$cell_type)
-#Pearson's Chi-squared test
-#data:  Bcell$ESR and Bcell$cell_type
-#X-squared = 1358, df = 21, p-value < 2.2e-16
-
-library (broom)
-install.packages("rcompanion")
-library(rcompanion)
-
-chisq_by_organ <- Bcell2 %>%
-  group_by(organ_groups) %>%
-  group_map(~ {
-    tab <- table(.x$cell_type, .x$ESR)
-    test <- chisq.test(tab)
-    list(table = tab, test = test, cramerV = cramerV(tab))
-  })
-names(chisq_by_organ) <- unique(Bcell$organ_groups)
-print(chisq_by_organ)
-
 chisq.test(Bcell2$ESR[Bcell2$organ_groups == "Small Intestine"], Bcell2$cell_type[Bcell2$organ_groups == "Small Intestine"])
 #Small Intestine
 #Pearson's Chi-squared test
@@ -327,21 +304,6 @@ chisq.test(Bcell$ESR, Bcell$sex)
 #Pearson's Chi-squared test
 #data:  Bcell$ESR and Bcell$sex
 #X-squared = 137.25, df = 3, p-value < 2.2e-16
-
-sex_test <- Bcell %>%
-  group_by(organ_groups, sex) %>%
-  group_modify(~ {
-    tab <- table(.x$ESR, .x$cell_type)
-    test <- chisq.test(tab)
-    tibble(
-      chi_sq = test$statistic,
-      df = test$parameter,
-      p_value = test$p.value,
-      cramerV = cramerV(tab)
-    )
-  })
-
-print (sex_test)
 
 chisq.test(Bcell2$ESR[Bcell2$organ_groups %in% c("Small Intestine") & Bcell2$sex == "female"], Bcell2$cell_type[Bcell2$organ_groups %in% c("Small Intestine") & Bcell2$sex == "female"])
 #Pearson's Chi-squared test
@@ -390,19 +352,6 @@ chisq.test(Bcell$ESR, Bcell$age_unified)
 #Pearson's Chi-squared test
 #data:  Bcell$ESR and Bcell$age_unified
 #X-squared = 557.12, df = 9, p-value < 2.2e-16
-
-age_test <- Bcell %>%
-  group_by(organ_groups, age) %>%
-  group_modify(~ {
-    tab <- table(.x$ESR, .x$cell_type)
-    test <- chisq.test(tab)
-    tibble(
-      chi_sq = test$statistic,
-      df = test$parameter,
-      p_value = test$p.value,
-      cramerV = cramerV(tab)
-    )
-  })
 
 chisq.test(Bcell2$ESR[Bcell2$organ_groups %in% c("Small Intestine") & Bcell2$age == "18-54"], Bcell2$cell_type[Bcell2$organ_groups %in% c("Small Intestine") & Bcell2$age == "18-54"])
 #Pearson's Chi-squared test
