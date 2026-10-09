@@ -1,0 +1,47 @@
+##Creation of the boxplots
+getwd()
+library(ggplot2)
+library(ggpubr)
+
+wd <- getwd()
+ESR_expression <- readRDS (file.path(wd, "ESR_expression.RDS"))
+
+# boxplot for ESR1 expression ----
+ggplot(ESR_expression, aes(tissue_type, log10(ESR1+1), fill = tissue_type)) +
+  geom_boxplot() +
+  facet_wrap(~SEX)+
+  geom_pwc(y.position = 0.8, label = "p.signif", hide.ns = T)+
+  labs(y = "log10_ESR1", x = "Tissue Type")+
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# boxplots for ESR2 expression ----
+ggplot(ESR_expression, aes(tissue_type, log10(ESR2 +1), fill = tissue_type))+
+  geom_boxplot() + 
+  facet_wrap(~ SEX)+
+  labs (x = "Tissue Type", y = "Log10_ESR2") +
+  geom_pwc(y.position = 0.8, label = "p.signif", hide.ns = T)+
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1))
+
+# Join of ESR1 and ESR2 expression ----
+ESR_expression_2 <- ESR_expression %>% pivot_longer(cols = c(ESR1, ESR2), names_to = "gene", values_to = "expression")
+ESR_expression_2$gene <- factor(ESR_expression_2$gene)
+
+ggplot(ESR_expression_2, aes(tissue_type, log10(expression + 1), fill = gene)) +
+  geom_boxplot() + 
+  facet_wrap(~ SEX) +
+  geom_pwc(y.position = 0.8, label = "p.signif", hide.ns = T) + 
+  labs(x = "Tissue Type", y = "Log10_ESR expression") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1))
+
+#analysis of ESR1, ESR2 expression based on AGE and SEX 
+ggplot(ESR_expression_2, aes(tissue_type, log10 (expression + 1), fill = gene))+
+  geom_boxplot() +
+  facet_wrap(~ AGE) + 
+  geom_pwc (y.position = 0.8, label = "p.signif", hide.ns = T) +
+  labs (x = "Tissue Type", y = "Log10_ESR expression") + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 45,hjust = 1))
+
