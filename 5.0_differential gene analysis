@@ -1,0 +1,351 @@
+path <- "C:/Users/lorig/OneDrive/Desktop/Thesis/1_Methods_Input/Scripts/1.8_differential analysis"
+setwd (path)
+
+library(tidyverse)
+library (ggpubr)
+library(RColorBrewer)
+library (Seurat)
+
+#Differential genes analysis ====
+
+Bcell.data <- readRDS (file.path(path, "6_Healthy_Pan-GI_atlas_B_20241119.rds"))
+Bcell.data <- subset(Bcell.data, !(tissue %in% c("body of stomach", "buccal mucosa", "epithelium of esophagus", "epithelium of stomach", "esophagus", "gingiva", "gingiva", "periodontium", "pyloric antrum", "stomach", "parotid gland", "pylorus", "labial gland", "mesenteric lymph node")))
+
+Bcell.data <- subset(Bcell.data, !(development_stage %in% c("10th week post-fertilization stage", "11th week post-fertilization stage", "12th week post-fertilization stage", "13th week post-fertilization stage", "15th week post-fertilization stage", "16th week post-fertilization stage", "17th week post-fertilization stage", "18th week post-fertilization stage", "19th week post-fertilization stage", "9th week post-fertilization stage",  "10-year-old stage", "12-year-old stage", "2-month-old stage", "4-year-old stage", "9-year-old stage", "juvenile stage (5-14 yo)", "pediatric stage", "newborn stage (0-28 days)", "6-year-old stage")))
+
+Bcell.data <- subset (Bcell.data, !(sex %in% "unknown"))
+saveRDS (Bcell.data, "bcelldata.rds")
+Bcell.data <- readRDS(file.path(path, "bcelldata.rds"))
+
+Bcell.data$cell_type <- droplevels (Bcell.data$cell_type)
+levels (Bcell.data$cell_type)
+table (Bcell.data$cell_type)
+Bcell.data$cell_type <- as.character (Bcell.data$cell_type)
+Bcell.data$cell_type <- ifelse (Bcell.data$cell_type == "pro-B cell", "precursor B cell", Bcell.data$cell_type)
+Bcell.data$cell_type <- factor(Bcell.data$cell_type)
+levels(Bcell.data$cell_type)
+table (Bcell.data$cell_type)
+
+Bcell.data$ESR_status <- ifelse (colSums(Bcell.data[["RNA"]]@data [c("ENSG00000091831", "ENSG00000140009"),] > 0) > 0 , "ESR_pos", "ESR_neg")
+
+table (Bcell.data$cell_type, Bcell.data$ESR_status)
+
+install.packages('devtools')
+devtools::install_github('immunogenomics/presto')
+
+gene_name <- Bcell.data[["RNA"]]@meta.features
+gene_name <- rownames_to_column(gene_name, "genes")
+gene_name <- select(gene_name, c("genes", "gene_symbols"))
+
+IgA <- subset (Bcell.data, Bcell.data$cell_type == "IgA plasma cell")
+IgG <- subset (Bcell.data, Bcell.data$cell_type == "IgG plasma cell")
+IgM <- subset (Bcell.data, Bcell.data$cell_type == "IgM plasma cell")
+memoryBcell <- subset (Bcell.data, Bcell.data$cell_type == "memory B cell")
+naiveBcell <- subset (Bcell.data, Bcell.data$cell_type == "naive B cell")
+
+Idents(IgA) <- "ESR_status"
+DEIgA <- FindMarkers(IgA, ident.1 = "ESR_pos", ident.2 = "ESR_neg", min.pct = 0, logfc.threshold = 0)
+DEIgA <- rownames_to_column (DEIgA, "genes")
+DEIgA <- merge(DEIgA, gene_name, by = "genes", all.x = T)
+DEIgA$cell_type <- "IgA"
+
+Idents(IgG) <- "ESR_status"
+DEIgG <- FindMarkers(IgG, ident.1 = "ESR_pos", ident.2 = "ESR_neg", min.pct = 0, logfc.threshold = 0)
+DEIgG <- rownames_to_column (DEIgG, "genes")
+DEIgG <- merge(DEIgG, gene_name, by = "genes", all.x = T)
+DEIgG$cell_type <- "IgG"
+
+Idents(IgM) <- "ESR_status"
+DEIgM <- FindMarkers(IgM, ident.1 = "ESR_pos", ident.2 = "ESR_neg", min.pct = 0, logfc.threshold = 0)
+DEIgM <- rownames_to_column (DEIgM, "genes")
+DEIgM <- merge(DEIgM, gene_name, by = "genes", all.x = T)
+DEIgM$cell_type <- "IgM"
+
+Idents(memoryBcell) <- "ESR_status"
+DEmemory <- FindMarkers(memoryBcell, ident.1 = "ESR_pos", ident.2 = "ESR_neg", min.pct = 0, logfc.threshold = 0)
+DEmemory <- rownames_to_column (DEmemory, "genes")
+DEmemory <- merge(DEmemory, gene_name, by = "genes", all.x = T)
+DEmemory$cell_type <- "memory B cell"
+
+Idents(naiveBcell) <- "ESR_status"
+DEnaive <- FindMarkers(naiveBcell, ident.1 = "ESR_pos", ident.2 = "ESR_neg", min.pct = 0, logfc.threshold = 0)
+DEnaive <- rownames_to_column (DEnaive, "genes")
+DEnaive <- merge(DEnaive, gene_name, by = "genes", all.x = T)
+DEnaive$cell_type <- "naive B cell"
+
+DEgenes <- rbind (DEIgA, DEIgG, DEIgM, DEnaive, DEmemory)
+
+
+DEgenes <- pivot_wider(DEgenes, names_from = cell_type, values_from = c(p_val, avg_log2FC, pct.1, pct.2, p_val_adj))
+DEgenes <- subset (DEgenes, !(genes %in% c ("ENSG00000140009", "ENSG00000091831")))
+
+install.packages("ComplexUpset")
+library(ComplexUpset)
+
+DEG <- DEgenes %>%
+  filter ( p_val_adj_IgA < 0.05 | p_val_adj_IgG < 0.05 | p_val_adj_IgM < 0.05 | `p_val_adj_memory B cell` < 0.05 | `p_val_adj_naive B cell` < 0.05) %>%
+  select(genes, gene_symbols, avg_log2FC_IgA, avg_log2FC_IgG, avg_log2FC_IgM, `avg_log2FC_naive B cell`, `avg_log2FC_memory B cell`, p_val_adj_IgA, p_val_adj_IgG, p_val_adj_IgM, `p_val_adj_memory B cell`, `p_val_adj_naive B cell`)
+
+DEG$IgA <- DEG$p_val_adj_IgA < 0.05
+DEG$IgG <- DEG$p_val_adj_IgG < 0.05
+DEG$IgM <- DEG$p_val_adj_IgM < 0.05
+DEG$memory_B <- DEG$`p_val_adj_memory B cell` < 0.05
+DEG$naive_B <- DEG$`p_val_adj_naive B cell` < 0.05
+
+library(writexl)
+write_xlsx(DEG, "DEG.xls")
+
+
+upset(DEG, intersect = c("IgA", "IgG", "IgM", "naive_B", "memory_B"), 
+      name = "Cell Type", 
+      min_size=10,
+      sort_sets = F
+      )
+
+library(devtools)
+install_github("jokergoo/ComplexHeatmap")
+library(ComplexHeatmap)
+library(circlize)
+
+DEG <- column_to_rownames(DEG, var = "gene_symbols")
+t <- as.matrix(DEG[2:6])
+col <- rev(colorRampPalette(brewer.pal(11,"RdBu"))(256))
+Heatmap(t,
+        row_names_gp = gpar(fontsize = 1),
+        column_names_gp = gpar(fontsize = 7),
+        cluster_columns = F,
+        cluster_rows = T,
+        name = "log2FC",
+        border = "black",
+        column_names_rot = 45,
+        col=colorRamp2(breaks=c(-6,-3,0,3,6), 
+                       colors=c(col[1], col[64], "white", col[192], col[255])),
+        heatmap_legend_param = list(border = "black"), width = 50,
+        clustering_method_rows = "ward.D2",
+        clustering_method_columns = "ward.D2")
+
+# Enrichment analysis and GISEA analysis ====
+library(enrichR)
+library(fgsea)
+library(msigdbr)
+DEG <- rownames_to_column(DEG, "gene_symbols")
+library(writexl)
+write_xlsx (DEIgA, "DEIgA.xlsx")
+
+# vulcano plot ====
+library (ggrepel)
+
+t <- DEIgA
+t <- subset(t, !(gene_symbols %in% c("ESR1", "ESR2")))
+t$diffexpressed <- "NO"
+t$diffexpressed[t$avg_log2FC > 0 & t$p_val_adj < 0.05] <- "UP"
+t$diffexpressed[t$avg_log2FC < 0 & t$p_val_adj < 0.05] <- "DOWN"
+t$log10 <-(-log10(t$p_val_adj))
+
+vulcano_plot <- ggplot(t, aes(x = avg_log2FC, y = -log10(p_val_adj),col = diffexpressed)) +
+  geom_vline(xintercept = 0, col = "gray", linetype = 'dashed') +
+  geom_hline(yintercept = -log10(0.05), col = "gray", linetype = 'dashed') + 
+  geom_point(size = 2)+
+  geom_text_repel(
+    data = t %>% filter(-log10(p_val_adj) > 80),
+    aes(label = gene_symbols),          
+    color = "black",
+    size = 4,
+    max.overlaps = Inf,            
+    box.padding = 0.4,
+    segment.color = "gray50"
+  ) +
+  scale_color_manual(values = c("blue", "grey","red"),
+                     labels = c("Downregulated", 
+                                "No-significance",
+                                "Upregulated"))+
+  theme_bw()+
+  labs(
+    x = "Log2FC",
+    y = "-Log10 (Pvalue adj)",
+    col = "Differentially Expressed Genes"
+  ) +
+  theme(
+    axis.title = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 12)
+  )
+
+ggsave("volcano_plot.png", plot = vulcano_plot, width = 7, height = 6, dpi = 500)
+
+# Enrichr analysis ==== 
+DEIgA2 <- DEIgA %>% filter(p_val_adj < 0.05)
+DEIgA2$diffexpressed[DEIgA2$avg_log2FC > 0] <- "UP"
+DEIgA2$diffexpressed[DEIgA2$avg_log2FC < 0] <- "DOWN"
+
+up <- subset(DEIgA2, DEIgA2$diffexpressed == "UP")
+down <- subset(DEIgA2, DEIgA2$diffexpressed == "DOWN")
+
+write.csv(up, "up_genes")
+writexl::write_xlsx(up, "up_genes.xlsx")
+write.csv(down, "down_genes")
+writexl::write_xlsx(down, "down_genes.xlsx")
+
+setEnrichrSite("Enrichr")
+
+dbs <- listEnrichrDbs()
+dbs <- c("ChEA_2022", "TRRUST_Transcription_Factors_2019", "ENCODE_and_ChEA_Consensus_TFs_from_ChIP-X", "GO_Biological_Process_2026", "miRTarBase_2017")
+
+IgAup <- up$gene_symbols
+enrichup <- enrichr(IgAup, dbs)
+write_xlsx(enrichup, "enrichupIgA.xlsx")
+
+IgAdown <- down$gene_symbols
+enrichdown <- enrichr(IgAdown, dbs)
+write_xlsx(enrichdown, "enrichdownIgA.xlsx")
+
+IgA <- DEIgA2$gene_symbols
+enrich <- enrichr(IgA, dbs)
+
+##Dotplot ====
+plotup <- enrichup[["GO_Biological_Process_2026"]]
+
+plotup <- plotup %>% 
+  arrange ("Adjusted.P.value") %>% 
+  slice_head(n = 10) %>%
+  separate(Overlap, into = c("Count", "Total"), sep = "/", convert = TRUE) %>%
+  mutate(
+    GeneRatio  = Count / Total,
+    neglog10p  = -log10(`Adjusted.P.value`),
+    Term       = factor(Term, levels = rev(Term)) 
+  )
+
+plotdown <- enrichdown[["GO_Biological_Process_2026"]]
+
+plotdown <- plotdown %>% 
+  arrange ("Adjusted.P.value") %>% 
+  slice_head(n = 10) %>%
+  separate(Overlap, into = c("Count", "Total"), sep = "/", convert = TRUE) %>%
+  mutate(
+    GeneRatio  = Count / Total,
+    neglog10p  = -log10(`Adjusted.P.value`),
+    Term       = factor(Term, levels = rev(Term)) 
+  )
+
+plotup$status <- "Upregulated genes"
+plotdown$status <- "Downregulated genes"
+plot <- rbind(plotup,plotdown)
+plot$status <- factor(plot$status, levels = c("Upregulated genes", "Downregulated genes"))
+
+plot <- plot %>%
+  mutate(Term = gsub("\\s*\\([^()]*\\)$", "", Term))
+
+plot <- plot %>%
+  arrange(
+    factor(status,
+           levels = c("Downregulated genes", "Upregulated genes")),
+    neglog10p
+  ) %>%
+  mutate(
+    Term = factor(Term, levels = unique(Term))
+  ) 
+
+ggplot(plot, aes(GeneRatio, Term))+
+  geom_point(aes(size = Count,
+                 color = neglog10p))+
+  scale_color_viridis_c(option = "plasma", 
+                        direction = -1, 
+                        name = "-log10(Adjusted P.value)") +
+  scale_size_continuous(name = "Count",
+                        range= c(3,9)) +
+  facet_wrap(vars(status))+
+  labs(
+    x = "Gene Ratio",
+    y = NULL,
+    title = "GO Enrichment analysis"
+  ) +
+  theme_bw(base_size = 12) + 
+  theme(
+    axis.text.y = element_text(size = 12)
+  )
+  
+
+# Gisea analysis ==== 
+a <- msigdbr_collections(db_species = "HS")
+
+gsets <- msigdbr(species = "Homo sapiens", 
+                 collection = "C5", 
+                 subcollection = "GO:BP"
+)
+gsets <- gsets %>%
+  split(x = .$gene_symbol, f = .$gs_name)
+
+DEIgA <- subset(DEIgA, !(gene_symbols)%in% c("ESR1", "ESR2"))
+DEIgA <- arrange(DEIgA, avg_log2FC)
+ranks <- sort (DEIgA$avg_log2FC, decreasing = T)
+names(ranks) <- DEIgA$gene_symbol
+
+GSEA <- fgsea(pathways = gsets, 
+                stats = ranks,
+              minSize = 10,
+              maxSize = 500
+              )
+library (data.table)
+fwrite(GSEA, file="c", sep="\t", sep2=c(" ", " ", " "))
+
+topPathwaysUp <- GSEA[NES > 0][head(order(padj), n = 5), pathway]
+topPathwaysDown <- GSEA[NES < 0][head(order(padj), n = 5), pathway]
+topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+plotGseaTable(gsets[topPathways], ranks, GSEA,gseaParam = 0.5)
+
+##Dotplot ====
+library(stringr)
+
+GSEA_plot <- GSEA %>%
+  filter(padj < 0.05) %>%
+  arrange(padj) %>%
+  slice_head(n = 15)
+
+GSEA_plot <- GSEA_plot %>% 
+  mutate(pathway = gsub("^GOBP_", " ", pathway))%>%
+  mutate(pathway = gsub("_", " ", pathway)) %>%
+  mutate(pathway = str_to_sentence(pathway))
+
+GSEA_plot <- GSEA_plot %>%
+  mutate(pathway = factor(pathway, levels = pathway[order(NES)]))
+
+ggplot(GSEA_plot, aes(x = NES, y = pathway)) +
+  geom_point(aes(size = size, color = -log10(padj))) +
+  scale_color_viridis_c(option = "plasma", direction = -1, name = "Adjusted P-value") +
+  scale_size_continuous(name = "Gene set size", range = c(2, 8)) +
+  theme_bw(base_size = 12) +
+  theme(
+    axis.text.y = element_text(size = 12)
+  ) +
+  labs(
+    x = "Normalized Enrichment Score (NES)",
+    y = NULL,
+    title = "GSEA Pathway Erichment Analysis"
+  )
+
+## up regulated genes ====
+up <- arrange(up, avg_log2FC)
+rank <- sort (up$avg_log2FC, decreasing = T)
+names(rank) <- up$gene_symbol
+
+upGSEA <- fgsea(pathways = gsets, 
+                stats = rank,
+                minSize = 10,
+                maxSize = 500,
+                scoreType = "pos"
+)
+
+## down regulated genes ====
+down <- arrange(down, avg_log2FC)
+rankd <- sort (down$avg_log2FC, decreasing = T)
+names(rankd) <- down$gene_symbol
+
+downGSEA <- fgsea(pathways = gsets, 
+                stats = rankd,
+                minSize = 10,
+                maxSize = 500,
+                scoreType = "neg"
+)
+
+
+
