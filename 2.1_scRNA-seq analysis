@@ -1,0 +1,293 @@
+library(tidyverse)
+library(ggpubr)
+library(Matrix)
+library(Seurat)
+
+path <- getwd()
+
+# Myleoid, B cell and T cell lineages analysis ====
+
+## Load and processing of myeloid scRNAseq data ====
+Myeloid.data <- readRDS(file.path(path, "8_Healthy_Pan-GI_atlas_Myeloid_20241119.rds"))
+
+myeloid <- Myeloid.data[["RNA"]]$data
+myeloid <- myeloid[c("ENSG00000091831", "ENSG00000140009"),]
+write.table(t(myeloid), "myeloid.tsv", sep = "\t", quote = F)
+
+metadata <- Myeloid.data@meta.data[c("cell_type", "disease", "sex", "tissue", "development_stage", "organ_groups")]
+write.table(metadata, "myeloid_metadata.tsv", sep = "\t", quote = F)
+metadata <- rownames_to_column(metadata, "cellID")
+
+myeloid <- read.delim(file.path(path, "myeloid.tsv"))
+colnames(myeloid) <- c("ESR1", "ESR2")
+myeloid <- rownames_to_column(myeloid, "cellID")
+
+myeloid <- merge (myeloid, metadata, by = "cellID")
+myeloid <- pivot_longer(myeloid, cols = c("ESR1", "ESR2"), values_to = "expression", names_to = "gene")
+myeloid$gene <- factor(myeloid$gene)
+myeloid$lineage <- "Myeloid"
+myeloid$lineage <- factor(myeloid$lineage)  
+
+## Load and processing of Bcell scRNAseq data ====
+Bcell.data <- readRDS(file.path(path, "6_Healthy_Pan-GI_atlas_B_20241119.rds"))
+
+Bcell <- Bcell.data[["RNA"]]$data
+Bcell <- Bcell[c("ENSG00000091831", "ENSG00000140009"),]
+Bcell <- as.matrix(Bcell)
+write.table (t(Bcell), "Bcell.tsv", sep = "\t", quote = F)
+
+metadata <- Bcell.data@meta.data[c("cell_type", "disease", "sex", "tissue", "development_stage", "organ_groups")]
+metadata <- rownames_to_column(metadata, "cellID")
+write.table(metadata, "Bcell_metadata.tsv", sep = "\t", quote = F)
+
+Bcell <- read.delim(file.path(path, "Bcell.tsv"), sep = "\t")
+colnames(Bcell) <- c("ESR1", "ESR2")
+Bcell <- rownames_to_column(Bcell, "cellID")
+
+Bcell <- merge (Bcell, metadata, by = "cellID")
+Bcell$lineage <- "B cell"
+Bcell$lineage <- factor(Bcell$lineage)
+Bcell <- pivot_longer(Bcell, cols = c("ESR1", "ESR2"), names_to = "gene", values_to = "expression")
+Bcell$gene <- factor(Bcell$gene)
+
+## Load and processing of T cell scRNA seq data ====
+
+Tcell.data <- readRDS (file.path(path, "4_Healthy_Pan-GI_atlas_TNK_20241119.rds"))
+
+Tcell <- Tcell.data[["RNA"]]$data
+Tcell <- Tcell [c("ENSG00000091831", "ENSG00000140009"),]
+Tcell <- as.matrix(Tcell)
+write.table(t(Tcell), "Tcell.tsv", sep = "\t", quote = F)
+
+metadata <- Tcell.data@meta.data[c("cell_type", "disease", "sex", "tissue", "development_stage", "organ_groups")]
+metadata <- rownames_to_column(metadata, "cellID")
+write.table(metadata, "Tcell_metadata.tsv", sep = "\t", quote = F)
+
+Tcell <- read.delim(file.path(path, "Tcell.tsv"))
+colnames(Tcell) <- c("ESR1", "ESR2")
+Tcell <- rownames_to_column(Tcell, "cellID")
+
+Tcell <- merge(Tcell, metadata, by = "cellID")
+Tcell <- pivot_longer(Tcell, cols = c("ESR1", "ESR2"), names_to = "gene", values_to = "expression")
+Tcell$gene <- factor(Tcell$gene)
+Tcell$lineage <- "T cell"
+Tcell$lineage <- factor(Tcell$lineage)
+
+# total analysis ====
+epithelial <- read.delim(file.path(path_epithelial, "epithelial lineage.tsv"))
+mesenchymal <- read.delim(file.path(path_mesenchymal, "mesenchymal lineage.tsv"))
+
+epithelial$lineage <- as.character(epithelial$lineage)
+epithelial$lineage <- "Epithelium"
+epithelial$lineage <- factor(epithelial$lineage)
+epithelial$cell_type <- factor(epithelial$cell_type)
+epithelial$disease <- factor(epithelial$disease)
+epithelial$sex <- factor(epithelial$sex)
+epithelial$tissue <- factor(epithelial$tissue)
+epithelial$development_stage <- factor (epithelial$development_stage)
+epithelial$organ_groups <- factor(epithelial$organ_groups)
+epithelial$gene <- factor(epithelial$gene, levels = c("ESR1", "ESR2"))
+
+mesenchymal$lineage <- "Mesenchymal"
+mesenchymal$lineage <- factor(mesenchymal$lineage)
+mesenchymal$cell_type <- factor(mesenchymal$cell_type)
+mesenchymal$disease <- factor(mesenchymal$disease)
+mesenchymal$sex <- factor(mesenchymal$sex)
+mesenchymal$tissue <- factor(mesenchymal$tissue)
+mesenchymal$development_stage <- factor (mesenchymal$development_stage)
+mesenchymal$organ_groups <- factor(mesenchymal$organ_groups)
+mesenchymal$gene <- factor(mesenchymal$gene, levels = c("ESR1", "ESR2"))
+
+total <- rbind(myeloid, Bcell, Tcell, epithelial, mesenchymal)
+
+total$disease <- droplevels(total$disease)
+total$cell_type <- droplevels(total$cell_type)
+total$cell_type <- factor(total$cell_type, 
+                          levels = sort(levels(total$cell_type),
+                                        decreasing = T))
+total$tissue <- droplevels(total$tissue)
+total <- subset(total, !(tissue %in% c("esophagus", "pyloric antrum", "periodontium", "parotid gland", "epithelium of esophagus", "labial gland", "stomach", "body of stomach", "pylorus", "epithelium of stomach", "gingiva", "buccal mucosa", "mesenteric lymph node")))
+total$tissue <- droplevels(total$tissue)
+
+total$tissue <- as.character(total$tissue)
+
+total$tissue <- ifelse(total$tissue == "colonic epithelium", 
+                       "colon", total$tissue)
+total$tissue <- ifelse(total$tissue == "epithelium of small intestine", 
+                       "small intestine", total$tissue)
+total$tissue <- ifelse(total$tissue == "epithelium of rectum", 
+                       "rectum", total$tissue)
+total$tissue <- ifelse(total$tissue == "ileal epithelium", 
+                       "ileum", total$tissue)
+total$tissue <- ifelse(total$tissue == "rectosigmoid junction", 
+                       "rectum", total$tissue)
+total$tissue <- ifelse(total$tissue == "colonic mucosa", 
+                       "colon", total$tissue)
+total$tissue <- ifelse(total$tissue == "lamina propria of small intestine", 
+                       "small intestine", total$tissue)
+total$tissue <- ifelse(total$tissue == "lamina propria of mucosa of colon", 
+                       "colon", total$tissue)
+total$tissue <- ifelse(total$tissue == "duodenal epithelium", 
+                       "duodenum", total$tissue)
+total$tissue <- ifelse(total$tissue == "ileum lamina propria", 
+                       "ileum", total$tissue)
+total$tissue <- ifelse(total$tissue == "intestine", "small intestine", total$tissue)
+
+total$tissue <- factor(total$tissue,
+                       levels = c("small intestine", "duodenum", "jejunum", "ileum", "colon", "caecum", "vermiform appendix", "ascending colon", "transverse colon", "descending colon", "sigmoid colon", "rectum"))
+
+levels(total$development_stage)
+total <- subset(total, !(development_stage %in% c("embryonic stage", "Carnegie stage 16", "Carnegie stage 17", "Carnegie stage 18", "Carnegie stage 19", "Carnegie stage 22", "9th week post-fertilization stage" , "10th week post-fertilization stage", "11th week post-fertilization stage", "12th week post-fertilization stage", "13th week post-fertilization stage", "15th week post-fertilization stage", "16th week post-fertilization stage", "17th week post-fertilization stage", "18th week post-fertilization stage", "19th week post-fertilization stage", "21st week post-fertilization stage", "4-year-old stage", "6-year-old stage", "9-year-old stage", "10-year-old stage", "12-year-old stage", "2-month-old stage", "newborn stage (0-28 days)", "pediatric stage", "juvenile stage (5-14 yo)")))
+
+levels(total$lineage)
+total$lineage <- factor(total$lineage, 
+                        levels = c("Epithelium", "Mesenchymal","Myeloid", "B cell", "T cell"))
+
+total <- subset(total, !(cell_type %in% c("unknown", "foveolar cell of stomach", "mucous neck cell of gastric gland", "megakaryocyte", "eosinophil", "neutrophil progenitor cell")))
+levels(total$cell_type)
+total$cell_type <- as.character(total$cell_type)
+
+total$cell_type <- ifelse (total$cell_type == "pro-B cell", "precursor B cell", total$cell_type)
+
+total$cell_type <- ifelse (total$cell_type == "fibroblast of gingiva", "fibroblast", total$cell_type)
+
+total$cell_type <- ifelse (total$cell_type == "fibroblastic reticular cell", "fibroblast", total$cell_type)
+
+total$cell_type <- ifelse (total$cell_type == "gastrointestinal tract (lamina propria) macrophage", "macrophage", total$cell_type)
+
+total$cell_type <- ifelse (total$cell_type == "TREM2-positive macrophage", "macrophage", total$cell_type)
+
+total$cell_type <- ifelse (total$cell_type == "dendritic cell, human", "dendritic cell", total$cell_type)
+
+total$cell_type <- ifelse (total$cell_type == "conventional dendritic cell", "dendritic cell", total$cell_type)
+
+total$cell_type <- factor(total$cell_type)
+
+## Creation of the DotPlot ====
+
+tot_summary <- total %>%
+  group_by(cell_type, gene, lineage, tissue, organ_groups) %>%
+  summarise(
+    n = n(),
+    n_positive = sum(expression > 0),
+    pct_expr = (sum(expression > 0)/n())*100, 
+    mean = (mean(expression)),
+    .groups = "drop"
+  ) %>%
+  filter (n >= 20)
+
+ggplot(tot_summary, aes(gene, cell_type)) +
+  geom_point(aes(size = pct_expr, colour = log1p(mean))) +
+  scale_colour_viridis_c(option = "viridis", 
+                         limits = c(0.00005, 0.33),
+                         breaks = seq(0.00, 0.30, by = 0.1)) +
+  scale_size_continuous(
+    breaks = seq(0, 30, by = 10),
+    limits = c(0, 30)) +
+  facet_grid(lineage ~ tissue, 
+             scale = "free_y",
+             labeller = label_wrap_gen(width = 10)) +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), 
+        strip.text = element_text(size = 7.5), axis.text.y = element_text())+
+  labs (
+    x = "Gene",
+    y = "Cell type",
+    size = "% of Expressing cells",
+    colour = "Avarage of expression") +
+  ggtitle ("scRNAseq analysis of ESR1 and ESR2 expression in the gastrointestinal tract")
+
+# Statistical analysis ====
+library (RColorBrewer)
+library (ggpubr)
+
+color <- colorRampPalette(brewer.pal(9, "GnBu")) (10)
+display.brewer.pal(9, "GnBu")
+display.brewer.all()
+
+barplot(rep(1, length (color)), col = color, border = NA, axes = F)
+
+color <- color[4:8]
+
+tot_summary$organ_groups <- factor(tot_summary$organ_groups, labels = c("Large intestine", "Small intestine"))
+
+tot_summary$organ_groups <- factor(tot_summary$organ_groups, levels = c("Small intestine", "Large intestine"))
+levels(tot_summary$lineage)
+tot_summary$lineage <- factor(tot_summary$lineage, levels = c("B cell","T cell","Myeloid","Epithelium","Mesenchymal"))
+
+ggplot(tot_summary, aes(lineage, log1p(pct_expr), fill = lineage))+
+  geom_boxplot()+
+  scale_fill_manual(values = color)+
+  facet_grid(cols=vars(organ_groups), rows=vars(gene), 
+             labeller = label_wrap_gen(width = 10))+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))+
+  geom_pwc(y.position = 0.8, label = "p.signif", hide.ns = T)+
+  labs(
+    x = "Lineage",
+    y = "Fraction of expresssing cells (%)",
+    fill = "Lineage"
+  )
+
+ggplot(tot_summary, aes(lineage, pct_expr, fill = lineage)) +
+  geom_boxplot() +
+  facet_grid(cols = vars(organ_groups), rows = vars(gene),
+             scales = "free_y",
+             labeller = label_wrap_gen(width = 10)) +
+  scale_fill_manual(values = color) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  geom_pwc(method = "wilcox.test", label = "p.signif", hide.ns = TRUE,
+           p.adjust.method = "BH")+
+  labs(
+    x = "Lineage",
+    y = " Fraction of expressing cells (%)",
+    fill = "Lineage"
+  )
+
+## Boxplots of the expression
+
+summary2 <- total %>% 
+  group_by(cell_type, gene, lineage, tissue, organ_groups) %>%
+  summarise(
+    n = n(),
+    n_positive = sum(expression > 0),
+    pct_expr = (sum(expression > 0)/n())*100, 
+    mean = (mean(expression)),
+    expression = sum (expression),
+    .groups = "drop"
+  ) %>%
+  filter (n >= 20)
+
+summary2$organ_groups <- factor(summary2$organ_groups, labels = c("Large Intestine", "Small Intestine"))
+summary2$organ_groups <- factor(summary2$organ_groups, levels = c("Small Intestine", "Large Intestine"))
+
+
+ggplot(summary2, aes(lineage, log10(expression), fill = lineage)) +
+  geom_boxplot() +
+  facet_grid(cols = vars(organ_groups), rows = vars(gene),
+             scales = "free_y",
+             labeller = label_wrap_gen(width = 10)) +
+  scale_fill_manual(values = color) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  geom_pwc(method = "wilcox.test", label = "p.signif", hide.ns = TRUE,
+           p.adjust.method = "BH")+
+  labs(
+    x = "Lineage",
+    y = "Log10 (ESR gene expression)",
+    fill = "Lineage"
+  )
+
+################################################################################
+
+class.c<-colorRampPalette(brewer.pal(9,"YlOrRd"))(12)
+display.brewer.pal(9, "YlOrRd")
+class <- c(class.c[4], class.c[6], class.c[8], class.c[10])
+
+barplot(
+  rep(1, length(color)),
+  col = color,
+  border = NA,
+  axes = FALSE
+)
